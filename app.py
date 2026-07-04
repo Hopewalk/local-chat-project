@@ -1,330 +1,260 @@
+import datetime
 import json
-import sqlite3
+import os
 import uuid
+import pymongo
 import requests
 from flask import Flask, Response, jsonify, render_template, request
+from dotenv import load_dotenv
+
+# Load environment variables from .env file
+load_dotenv()
 
 app = Flask(__name__)
-DB_FILE = "conversations.db"
 
+# MongoDB Configuration
+MONGO_URI = os.environ.get('MONGO_URI', 'mongodb://localhost:27017/')
+db_name = os.environ.get('MONGO_DB', 'lumina_chat')
 
-def get_db_connection():
-    conn = sqlite3.connect(DB_FILE)
-    conn.row_factory = sqlite3.Row
-    return conn
-
+try:
+    mongo_client = pymongo.MongoClient(MONGO_URI, serverSelectionTimeoutMS=2000)
+    db = mongo_client[db_name]
+    
+    # Collections
+    settings_col = db['settings']
+    conversations_col = db['conversations']
+    messages_col = db['messages']
+    
+    # Test connection
+    mongo_client.server_info()
+    print(f"Connected to MongoDB at {MONGO_URI}")
+except Exception as e:
+    print(f"Warning: Could not connect to MongoDB: {str(e)}")
+    print("Please make sure MongoDB is running.")
 
 def init_db():
-    conn = get_db_connection()
-    cursor = conn.cursor()
-
-    # Settings table
-    cursor.execute(
-        """
-        CREATE TABLE IF NOT EXISTS settings (
-            key TEXT PRIMARY KEY,
-            value TEXT
-        )
-    """
-    )
-
-    # Conversations table
-    cursor.execute(
-        """
-        CREATE TABLE IF NOT EXISTS conversations (
-            id TEXT PRIMARY KEY,
-            title TEXT NOT NULL,
-            created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
-        )
-    """
-    )
-
-    # Messages table
-    cursor.execute(
-        """
-        CREATE TABLE IF NOT EXISTS messages (
-            id TEXT PRIMARY KEY,
-            conversation_id TEXT NOT NULL,
-            role TEXT NOT NULL,
-            content TEXT NOT NULL,
-            created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
-            FOREIGN KEY (conversation_id) REFERENCES conversations (id) ON DELETE CASCADE
-        )
-    """
-    )
-
     # Insert default settings if not exists
-    cursor.execute(
-        "INSERT OR IGNORE INTO settings (key, value) VALUES ('api_url', 'http://localhost:1234/v1')"
-    )
-    cursor.execute(
-        "INSERT OR IGNORE INTO settings (key, value) VALUES ('model_name', 'qwen2.5-7b-instruct')"
-    )
+    if not settings_col.find_one({"key": "api_url"}):
+        settings_col.insert_one({"key": "api_url", "value": "http://localhost:1234/v1"})
+    if not settings_col.find_one({"key": "model_name"}):
+        settings_col.insert_one({"key": "model_name", "value": "qwen2.5-7b-instruct"})
 
-    conn.commit()
-    conn.close()
-
-
-# Initialize the database
-init_db()
-
+# Initialize database defaults
+try:
+    init_db()
+except Exception as e:
+    print("Failed to initialize database defaults:", e)
 
 def get_setting(key, default=None):
-    conn = get_db_connection()
-    row = conn.execute("SELECT value FROM settings WHERE key = ?", (key,)).fetchone()
-    conn.close()
-    return row["value"] if row else default
-
+    try:
+        row = settings_col.find_one({"key": key})
+        return row['value'] if row else default
+    except Exception as e:
+        print("Error getting setting:", e)
+        return default
 
 def set_setting(key, value):
-    conn = get_db_connection()
-    conn.execute(
-        "INSERT OR REPLACE INTO settings (key, value) VALUES (?, ?)", (key, value)
-    )
-    conn.commit()
-    conn.close()
+    try:
+        settings_col.update_one({"key": key}, {"$set": {"value": value}}, upsert=True)
+    except Exception as e:
+        print("Error setting setting:", e)
 
-
-@app.route("/")
+@app.route('/')
 def index():
-    return render_template("index.html")
-
+    return render_template('index.html')
 
 # Settings Endpoints
-@app.route("/api/settings", methods=["GET", "POST"])
+@app.route('/api/settings', methods=['GET', 'POST'])
 def handle_settings():
-    if request.method == "POST":
+    if request.method == 'POST':
         data = request.json
-        api_url = data.get("api_url", "").strip().rstrip("/")
-        model_name = data.get("model_name", "").strip()
-
+        api_url = data.get('api_url', '').strip().rstrip('/')
+        model_name = data.get('model_name', '').strip()
+        
         if api_url:
-            set_setting("api_url", api_url)
+            set_setting('api_url', api_url)
         if model_name:
-            set_setting("model_name", model_name)
+            set_setting('model_name', model_name)
+            
+        return jsonify({"status": "success", "api_url": get_setting('api_url'), "model_name": get_setting('model_name')})
+    
+    return jsonify({
+        "api_url": get_setting('api_url'),
+        "model_name": get_setting('model_name')
+    })
 
-        return jsonify(
-            {
-                "status": "success",
-                "api_url": get_setting("api_url"),
-                "model_name": get_setting("model_name"),
-            }
-        )
-
-    return jsonify(
-        {"api_url": get_setting("api_url"), "model_name": get_setting("model_name")}
-    )
-
-
-@app.route("/api/models", methods=["GET"])
+@app.route('/api/models', methods=['GET'])
 def get_available_models():
-    api_url = get_setting("api_url")
+    api_url = get_setting('api_url')
     try:
         response = requests.get(f"{api_url}/models", timeout=3)
         if response.status_code == 200:
             models_data = response.json()
-            # Extract model IDs
-            models = [m["id"] for m in models_data.get("data", [])]
+            models = [m['id'] for m in models_data.get('data', [])]
             return jsonify({"status": "success", "models": models})
-        return jsonify(
-            {
-                "status": "error",
-                "message": f"API returned status {response.status_code}",
-                "models": [],
-            }
-        )
+        return jsonify({"status": "error", "message": f"API returned status {response.status_code}", "models": []})
     except Exception as e:
-        return jsonify(
-            {
-                "status": "error",
-                "message": f"Could not connect to API: {str(e)}",
-                "models": [],
-            }
-        )
-
+        return jsonify({"status": "error", "message": f"Could not connect to API: {str(e)}", "models": []})
 
 # Conversations Endpoints
-@app.route("/api/conversations", methods=["GET", "POST"])
+@app.route('/api/conversations', methods=['GET', 'POST'])
 def handle_conversations():
-    conn = get_db_connection()
-    if request.method == "POST":
+    if request.method == 'POST':
         data = request.json or {}
         conv_id = str(uuid.uuid4())
-        title = data.get("title", "New Chat").strip()
-        conn.execute(
-            "INSERT INTO conversations (id, title) VALUES (?, ?)", (conv_id, title)
-        )
-        conn.commit()
-        conn.close()
+        title = data.get('title', 'New Chat').strip()
+        
+        conversations_col.insert_one({
+            "_id": conv_id,
+            "title": title,
+            "created_at": datetime.datetime.now(datetime.timezone.utc)
+        })
         return jsonify({"id": conv_id, "title": title})
-
+    
     # GET method
-    rows = conn.execute(
-        "SELECT id, title, created_at FROM conversations ORDER BY created_at DESC"
-    ).fetchall()
-    conversations = [dict(r) for r in rows]
-    conn.close()
+    rows = conversations_col.find().sort("created_at", pymongo.DESCENDING)
+    conversations = []
+    for r in rows:
+        conversations.append({
+            "id": r["_id"],
+            "title": r["title"],
+            "created_at": r["created_at"].isoformat() if isinstance(r["created_at"], datetime.datetime) else str(r["created_at"])
+        })
     return jsonify(conversations)
 
-
-@app.route("/api/conversations/<conv_id>", methods=["DELETE", "PUT"])
+@app.route('/api/conversations/<conv_id>', methods=['DELETE', 'PUT'])
 def modify_conversation(conv_id):
-    conn = get_db_connection()
-    if request.method == "DELETE":
-        conn.execute("DELETE FROM conversations WHERE id = ?", (conv_id,))
-        conn.execute("DELETE FROM messages WHERE conversation_id = ?", (conv_id,))
-        conn.commit()
-        conn.close()
+    if request.method == 'DELETE':
+        conversations_col.delete_one({"_id": conv_id})
+        messages_col.delete_many({"conversation_id": conv_id})
         return jsonify({"status": "success"})
-
-    elif request.method == "PUT":
+    
+    elif request.method == 'PUT':
         data = request.json or {}
-        title = data.get("title", "").strip()
+        title = data.get('title', '').strip()
         if not title:
             return jsonify({"status": "error", "message": "Title cannot be empty"}), 400
-        conn.execute(
-            "UPDATE conversations SET title = ? WHERE id = ?", (title, conv_id)
-        )
-        conn.commit()
-        conn.close()
+        
+        conversations_col.update_one({"_id": conv_id}, {"$set": {"title": title}})
         return jsonify({"status": "success", "title": title})
 
-
-@app.route("/api/conversations/<conv_id>/messages", methods=["GET"])
+@app.route('/api/conversations/<conv_id>/messages', methods=['GET'])
 def get_messages(conv_id):
-    conn = get_db_connection()
-    rows = conn.execute(
-        "SELECT role, content FROM messages WHERE conversation_id = ? ORDER BY created_at ASC",
-        (conv_id,),
-    ).fetchall()
-    messages = [dict(r) for r in rows]
-    conn.close()
+    rows = messages_col.find({"conversation_id": conv_id}).sort("created_at", pymongo.ASCENDING)
+    messages = []
+    for r in rows:
+        messages.append({
+            "role": r["role"],
+            "content": r["content"]
+        })
     return jsonify(messages)
 
-
 # Chat stream
-@app.route("/api/chat", methods=["POST"])
+@app.route('/api/chat', methods=['POST'])
 def chat():
     data = request.json
-    conv_id = data.get("conversation_id")
-    user_message = data.get("message", "").strip()
-    think_mode = data.get("think_mode", False)
-
+    conv_id = data.get('conversation_id')
+    user_message = data.get('message', '').strip()
+    think_mode = data.get('think_mode', False)
+    
     if not conv_id or not user_message:
-        return (
-            jsonify(
-                {"status": "error", "message": "Missing conversation_id or message"}
-            ),
-            400,
-        )
-
-    conn = get_db_connection()
-
+        return jsonify({"status": "error", "message": "Missing conversation_id or message"}), 400
+    
     # Check if conversation exists, if not create it
-    conv = conn.execute(
-        "SELECT id FROM conversations WHERE id = ?", (conv_id,)
-    ).fetchone()
+    conv = conversations_col.find_one({"_id": conv_id})
     if not conv:
-
-        conn.execute(
-            "INSERT INTO conversations (id, title) VALUES (?, ?)",
-            (conv_id, user_message[:30] + ("..." if len(user_message) > 30 else "")),
-        )
-
+        conversations_col.insert_one({
+            "_id": conv_id,
+            "title": user_message[:30] + ('...' if len(user_message) > 30 else ''),
+            "created_at": datetime.datetime.now(datetime.timezone.utc)
+        })
+        
     # Save user message
     user_msg_id = str(uuid.uuid4())
-    conn.execute(
-        "INSERT INTO messages (id, conversation_id, role, content) VALUES (?, ?, 'user', ?)",
-        (user_msg_id, conv_id, user_message),
-    )
-    conn.commit()
-
+    messages_col.insert_one({
+        "_id": user_msg_id,
+        "conversation_id": conv_id,
+        "role": "user",
+        "content": user_message,
+        "created_at": datetime.datetime.now(datetime.timezone.utc)
+    })
+    
     # Retrieve chat history for context
-    rows = conn.execute(
-        "SELECT role, content FROM messages WHERE conversation_id = ? ORDER BY created_at ASC",
-        (conv_id,),
-    ).fetchall()
+    rows = messages_col.find({"conversation_id": conv_id}).sort("created_at", pymongo.ASCENDING)
     history = []
     for r in rows:
-        history.append({"role": r["role"], "content": r["content"]})
-
-    conn.close()
-
-    # Setup prompt modifier for Think Mode if toggled
-    # If think mode is enabled, we append instructions to prompt or system.
-    # LM Studio and Qwen 3.5 support system instructions. We insert or modify system prompt.
+        history.append({"role": r['role'], "content": r['content']})
+    
+    # Setup prompt modifier for Think Mode
     system_prompt = "You are a helpful assistant."
     if think_mode:
         system_prompt += "\nIMPORTANT: You MUST show your step-by-step thinking process inside <think>...</think> tags before you provide the final response. For example:\n<think>\nThinking process goes here...\n</think>\nYour actual response here."
     else:
         system_prompt += "\nIMPORTANT: Provide a direct response. Do not use <think> tags or output a thinking process."
-
+        
     # Build payload messages
     api_messages = [{"role": "system", "content": system_prompt}] + history
-
-    api_url = get_setting("api_url")
-    model_name = get_setting("model_name")
-
-    headers = {"Content-Type": "application/json"}
-
+    
+    api_url = get_setting('api_url')
+    model_name = get_setting('model_name')
+    
+    headers = {
+        "Content-Type": "application/json"
+    }
+    
     payload = {
         "model": model_name,
         "messages": api_messages,
         "stream": True,
-        "temperature": 0.7,
+        "temperature": 0.7
     }
-
+    
     def generate():
         assistant_content = []
         try:
-            response = requests.post(
-                f"{api_url}/chat/completions",
-                headers=headers,
-                json=payload,
-                stream=True,
-                timeout=10,
-            )
-
+            response = requests.post(f"{api_url}/chat/completions", headers=headers, json=payload, stream=True, timeout=10)
+            
             if response.status_code != 200:
                 error_msg = f"Error: API returned status code {response.status_code}"
                 yield f"data: {json.dumps({'error': error_msg})}\n\n"
                 return
-
+                
             for line in response.iter_lines():
                 if line:
-                    decoded = line.decode("utf-8")
+                    decoded = line.decode('utf-8')
                     if decoded.startswith("data: "):
                         data_str = decoded[6:]
                         if data_str.strip() == "[DONE]":
                             break
                         try:
                             chunk_json = json.loads(data_str)
-                            delta = chunk_json.get("choices", [{}])[0].get("delta", {})
-                            content = delta.get("content", "")
+                            delta = chunk_json.get('choices', [{}])[0].get('delta', {})
+                            content = delta.get('content', '')
                             if content:
                                 assistant_content.append(content)
                                 yield f"data: {json.dumps({'content': content})}\n\n"
                         except json.JSONDecodeError:
                             continue
-
+                            
             # Stream completed, save to database
             full_response = "".join(assistant_content)
             if full_response:
-                db_conn = get_db_connection()
                 assist_msg_id = str(uuid.uuid4())
-                db_conn.execute(
-                    "INSERT INTO messages (id, conversation_id, role, content) VALUES (?, ?, 'assistant', ?)",
-                    (assist_msg_id, conv_id, full_response),
-                )
-                db_conn.commit()
-                db_conn.close()
-
+                messages_col.insert_one({
+                    "_id": assist_msg_id,
+                    "conversation_id": conv_id,
+                    "role": "assistant",
+                    "content": full_response,
+                    "created_at": datetime.datetime.now(datetime.timezone.utc)
+                })
+                
         except requests.exceptions.RequestException as e:
             error_msg = f"Error connecting to LM Studio API: {str(e)}. Please check if your LM Studio server is running and the API endpoint is correct."
             yield f"data: {json.dumps({'error': error_msg})}\n\n"
+            
+    return Response(generate(), mimetype='text/event-stream')
 
-    return Response(generate(), mimetype="text/event-stream")
-
-
-if __name__ == "__main__":
-    app.run(host="0.0.0.0", port=5001, debug=True)
+if __name__ == '__main__':
+    flask_port = int(os.environ.get('FLASK_PORT', 5001))
+    flask_debug = os.environ.get('FLASK_DEBUG', 'True').lower() in ('true', '1', 't', 'y', 'yes')
+    app.run(host='0.0.0.0', port=flask_port, debug=flask_debug)

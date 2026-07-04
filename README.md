@@ -6,7 +6,7 @@ Lumina Chat is a lightweight, responsive, and aesthetically premium Flask-based 
 
 - **Dynamic Connection Configuration:** Configure your LM Studio API endpoint (local or remote IP) directly from the interface.
 - **Deep Reasoning Parser (Think Mode):** Parses Qwen's `<think>` tags dynamically to render the AI's reasoning process in an expandable, beautifully styled brain box.
-- **SQLite History:** Automatically saves conversation lists, messages, and active settings in a local SQLite database (`conversations.db`).
+- **MongoDB History:** Automatically saves conversation lists, messages, and active settings in a MongoDB instance.
 - **Prompt Starters:** Interactive prompt grid for coding, math, writing, and debugging.
 - **Syntax Highlighting & Code Copy:** Full copy-to-clipboard buttons and PrismJS syntax highlighting on code blocks.
 - **Network Shared:** Built to run on `0.0.0.0`, allowing access from other computers on the same router/network.
@@ -17,7 +17,9 @@ Lumina Chat is a lightweight, responsive, and aesthetically premium Flask-based 
 
 ### 📋 Prerequisites
 
-Make sure you have **Python 3.8+** installed.
+1. **Python 3.8+** installed.
+2. **MongoDB** installed and running on your system (defaults to `mongodb://localhost:27017/` database `lumina_chat`).
+   - If your MongoDB is hosted on another machine, set the environment variable: `MONGO_URI=mongodb://YOUR_IP:27017/` before starting.
 
 ---
 
