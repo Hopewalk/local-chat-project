@@ -1,6 +1,6 @@
 # Hope Chat - Local AI Interface
 
-Hope Chat is a lightweight, responsive, and aesthetically premium Flask-based web interface designed to connect to an LM Studio server (running Qwen 3.5 9B or other LLMs) on your local network.
+Hope Chat is a lightweight, responsive, and aesthetically premium Flask-based web interface designed to connect to an LM Studio server or other LLMs on your local network.
 
 ---
 
