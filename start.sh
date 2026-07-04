@@ -27,5 +27,5 @@ pip install --upgrade pip
 pip install -r requirements.txt
 
 # Start the Flask app
-echo "Starting Flask Server on port 5001..."
-python app.py
+echo "Starting Flask Server..."
+python run.py
