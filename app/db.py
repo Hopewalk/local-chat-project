@@ -32,8 +32,8 @@ class Database:
             app.logger.error(f"Could not connect to MongoDB: {str(e)}")
 
     def init_defaults(self, app):
-        default_api = app.config['BASE_URL']
-        default_model = app.config['MODEL_NAME']
+        default_api = app.config.get('BASE_URL', 'http://localhost:1234/v1')
+        default_model = app.config.get('MODEL_NAME', 'qwen/qwen3.5-9b')
         
         if self.settings_col is not None:
             if not self.settings_col.find_one({"key": "api_url"}):
