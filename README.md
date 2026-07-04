@@ -96,4 +96,4 @@ If you are running LM Studio on a separate machine on the same router:
 1. On the **LM Studio PC**, navigate to the **Local Server** tab.
 2. In **Server Settings**, change the **Host Binding** from `127.0.0.1` (localhost) to **`0.0.0.0`** (this allows connections from other local devices).
 3. Start the server.
-4. On the **Lumina Chat PC**, open the interface, click **Connection Settings** in the bottom left, enter the LM Studio PC's local IP (e.g. `http://192.168.1.15:1234/v1`), and click **Save Changes**.
+4. On the **Lumina Chat PC**, open the interface, click **Connection Settings** in the bottom left, enter the LM Studio PC's local IP (e.g. `http://[IP_ADDRESS]/v1`), and click **Save Changes**.
