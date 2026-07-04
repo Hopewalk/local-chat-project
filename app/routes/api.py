@@ -20,14 +20,14 @@ def get_api_url():
     db_base = SettingModel.get('api_url')
     if db_base:
         return normalize_api_url(db_base)
-    return 'http://localhost:1234/v1'
+    return ''
 
 def get_model_name():
     # Load strictly from SettingModel (UI settings)
     db_model = SettingModel.get('model_name')
     if db_model:
         return db_model.strip()
-    return 'qwen/qwen3.5-9b'
+    return ''
 
 @api_bp.route('/settings', methods=['GET', 'POST'])
 def handle_settings():

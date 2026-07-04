@@ -4,8 +4,8 @@ let isStreaming = false;
 let thinkMode = localStorage.getItem('thinkMode') === 'true';
 let abortController = null;
 let appSettings = {
-    api_url: 'http://localhost:1234/v1',
-    model_name: 'qwen/qwen3.5-9b',
+    api_url: '',
+    model_name: '',
     system_prompt: 'You are a helpful assistant.',
     temperature: 0.7
 };
