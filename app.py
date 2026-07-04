@@ -14,7 +14,7 @@ app = Flask(__name__)
 
 # MongoDB Configuration
 MONGO_URI = os.environ.get('MONGO_URI', 'mongodb://localhost:27017/')
-db_name = os.environ.get('MONGO_DB', 'lumina_chat')
+db_name = os.environ.get('MONGO_DB', 'hope_chat')
 
 try:
     mongo_client = pymongo.MongoClient(MONGO_URI, serverSelectionTimeoutMS=2000)

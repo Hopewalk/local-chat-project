@@ -3,7 +3,7 @@
 # Exit on error
 set -e
 
-echo "=== Starting Lumina Chat Setup & Server ==="
+echo "=== Starting Hope Chat Setup & Server ==="
 
 # Check if python3 is installed
 if ! command -v python3 &> /dev/null; then

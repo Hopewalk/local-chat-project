@@ -1,6 +1,6 @@
-# Lumina Chat - Local AI Interface
+# Hope Chat - Local AI Interface
 
-Lumina Chat is a lightweight, responsive, and aesthetically premium Flask-based web interface designed to connect to a local LM Studio server running **Qwen 3.5 9B** (or any other LLM) on your local network.
+Hope Chat is a lightweight, responsive, and aesthetically premium Flask-based web interface designed to connect to a local LM Studio server running **Qwen 3.5 9B** (or any other LLM) on your local network.
 
 ## Features
 
@@ -18,7 +18,7 @@ Lumina Chat is a lightweight, responsive, and aesthetically premium Flask-based 
 ### 📋 Prerequisites
 
 1. **Python 3.8+** installed.
-2. **MongoDB** installed and running on your system (defaults to `mongodb://localhost:27017/` database `lumina_chat`).
+2. **MongoDB** installed and running on your system (defaults to `mongodb://localhost:27017/` database `hope_chat`).
    - If your MongoDB is hosted on another machine, set the environment variable: `MONGO_URI=mongodb://YOUR_IP:27017/` before starting.
 
 ---
@@ -96,4 +96,4 @@ If you are running LM Studio on a separate machine on the same router:
 1. On the **LM Studio PC**, navigate to the **Local Server** tab.
 2. In **Server Settings**, change the **Host Binding** from `127.0.0.1` (localhost) to **`0.0.0.0`** (this allows connections from other local devices).
 3. Start the server.
-4. On the **Lumina Chat PC**, open the interface, click **Connection Settings** in the bottom left, enter the LM Studio PC's local IP (e.g. `http://[IP_ADDRESS]/v1`), and click **Save Changes**.
+4. On the **Hope Chat PC**, open the interface, click **Connection Settings** in the bottom left, enter the LM Studio PC's local IP (e.g. `http://[IP_ADDRESS]/v1`), and click **Save Changes**.

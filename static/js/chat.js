@@ -693,7 +693,7 @@ async function handleSendMessage() {
     const bubbleElement = assistantRow.querySelector('.message-bubble');
     
     // Show dynamic streaming indicator in assistant bubble initially
-    bubbleElement.innerHTML = '<span class="status-text"><i class="fa-solid fa-spinner fa-spin"></i> Lumina is thinking...</span>';
+    bubbleElement.innerHTML = '<span class="status-text"><i class="fa-solid fa-spinner fa-spin"></i> Hope is thinking...</span>';
     scrollToBottom();
     
     isStreaming = true;

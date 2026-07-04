@@ -1,5 +1,5 @@
 @echo off
-echo === Starting Lumina Chat Setup & Server ===
+echo === Starting Hope Chat Setup & Server ===
 
 :: Check if Python is installed
 python --version >nul 2>&1
