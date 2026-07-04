@@ -18,25 +18,17 @@ def normalize_api_url(url):
     return url
 
 def get_api_url():
-    # Priority: 1. Database config (UI settings), 2. Environment config
+    # Load strictly from Database config (UI settings)
     db_base = db.get_setting('api_url')
     if db_base:
         return normalize_api_url(db_base)
-    
-    env_base = current_app.config.get('BASE_URL')
-    if env_base:
-        return normalize_api_url(env_base)
     return 'http://localhost:1234/v1'
 
 def get_model_name():
-    # Priority: 1. Database config (UI settings), 2. Environment config
+    # Load strictly from Database config (UI settings)
     db_model = db.get_setting('model_name')
     if db_model:
         return db_model.strip()
-        
-    env_model = current_app.config.get('MODEL_NAME')
-    if env_model:
-        return env_model.strip()
     return 'qwen/qwen3.5-9b'
 
 @api_bp.route('/settings', methods=['GET', 'POST'])
