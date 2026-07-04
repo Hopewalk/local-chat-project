@@ -37,7 +37,7 @@ def init_db():
     if not settings_col.find_one({"key": "api_url"}):
         settings_col.insert_one({"key": "api_url", "value": "http://localhost:1234/v1"})
     if not settings_col.find_one({"key": "model_name"}):
-        settings_col.insert_one({"key": "model_name", "value": "qwen2.5-7b-instruct"})
+        settings_col.insert_one({"key": "model_name", "value": "qwen/qwen3.5-9b"})
 
 # Initialize database defaults
 try:
@@ -52,6 +52,28 @@ def get_setting(key, default=None):
     except Exception as e:
         print("Error getting setting:", e)
         return default
+
+def normalize_api_url(url):
+    if not url:
+        return ""
+    url = url.strip().rstrip('/')
+    if not url.endswith('/v1'):
+        url = f"{url}/v1"
+    return url
+
+def get_api_url():
+    # If BASE_URL is set in environment, prioritize it. Otherwise fallback to database setting.
+    env_base = os.environ.get('BASE_URL')
+    if env_base:
+        return normalize_api_url(env_base)
+    return normalize_api_url(get_setting('api_url', 'http://localhost:1234/v1'))
+
+def get_model_name():
+    # If MODEL_NAME is set in environment, prioritize it. Otherwise fallback to database setting.
+    env_model = os.environ.get('MODEL_NAME')
+    if env_model:
+        return env_model.strip()
+    return get_setting('model_name', 'qwen/qwen3.5-9b')
 
 def set_setting(key, value):
     try:
@@ -76,16 +98,16 @@ def handle_settings():
         if model_name:
             set_setting('model_name', model_name)
             
-        return jsonify({"status": "success", "api_url": get_setting('api_url'), "model_name": get_setting('model_name')})
+        return jsonify({"status": "success", "api_url": get_api_url(), "model_name": get_model_name()})
     
     return jsonify({
-        "api_url": get_setting('api_url'),
-        "model_name": get_setting('model_name')
+        "api_url": get_api_url(),
+        "model_name": get_model_name()
     })
 
 @app.route('/api/models', methods=['GET'])
 def get_available_models():
-    api_url = get_setting('api_url')
+    api_url = get_api_url()
     try:
         response = requests.get(f"{api_url}/models", timeout=3)
         if response.status_code == 200:
@@ -195,8 +217,8 @@ def chat():
     # Build payload messages
     api_messages = [{"role": "system", "content": system_prompt}] + history
     
-    api_url = get_setting('api_url')
-    model_name = get_setting('model_name')
+    api_url = get_api_url()
+    model_name = get_model_name()
     
     headers = {
         "Content-Type": "application/json"
