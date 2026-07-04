@@ -1,11 +1,9 @@
-import datetime
 import json
-import os
-import uuid
-import pymongo
 import requests
-from flask import Blueprint, Response, jsonify, request, current_app
+from flask import Blueprint, Response, jsonify, request
 from app.db import db
+from app.models import SettingModel, ConversationModel, MessageModel
+from app.forms import SettingsForm, ChatForm, RenameForm
 
 api_bp = Blueprint('api', __name__)
 
@@ -18,15 +16,15 @@ def normalize_api_url(url):
     return url
 
 def get_api_url():
-    # Load strictly from Database config (UI settings)
-    db_base = db.get_setting('api_url')
+    # Load strictly from SettingModel (UI settings)
+    db_base = SettingModel.get('api_url')
     if db_base:
         return normalize_api_url(db_base)
     return 'http://localhost:1234/v1'
 
 def get_model_name():
-    # Load strictly from Database config (UI settings)
-    db_model = db.get_setting('model_name')
+    # Load strictly from SettingModel (UI settings)
+    db_model = SettingModel.get('model_name')
     if db_model:
         return db_model.strip()
     return 'qwen/qwen3.5-9b'
@@ -34,35 +32,33 @@ def get_model_name():
 @api_bp.route('/settings', methods=['GET', 'POST'])
 def handle_settings():
     if request.method == 'POST':
-        data = request.json or {}
-        api_url = data.get('api_url', '').strip().rstrip('/')
-        model_name = data.get('model_name', '').strip()
-        system_prompt = data.get('system_prompt', '').strip()
-        temperature = data.get('temperature', '0.7').strip()
-        
-        if api_url:
-            db.set_setting('api_url', api_url)
-        if model_name:
-            db.set_setting('model_name', model_name)
-        if system_prompt:
-            db.set_setting('system_prompt', system_prompt)
-        if temperature:
-            db.set_setting('temperature', temperature)
+        form = SettingsForm(request.json)
+        if not form.validate():
+            return jsonify({"status": "error", "errors": form.errors}), 400
+            
+        if form.api_url:
+            SettingModel.set('api_url', form.api_url)
+        if form.model_name:
+            SettingModel.set('model_name', form.model_name)
+        if form.system_prompt:
+            SettingModel.set('system_prompt', form.system_prompt)
+        if form.temperature:
+            SettingModel.set('temperature', form.temperature)
             
         return jsonify({
             "status": "success", 
             "api_url": get_api_url(), 
             "model_name": get_model_name(),
-            "system_prompt": db.get_setting('system_prompt', 'You are a helpful assistant.'),
-            "temperature": float(db.get_setting('temperature', '0.7')),
+            "system_prompt": SettingModel.get('system_prompt', 'You are a helpful assistant.'),
+            "temperature": float(SettingModel.get('temperature', '0.7')),
             "mongo_status": db.ping()
         })
     
     return jsonify({
         "api_url": get_api_url(),
         "model_name": get_model_name(),
-        "system_prompt": db.get_setting('system_prompt', 'You are a helpful assistant.'),
-        "temperature": float(db.get_setting('temperature', '0.7')),
+        "system_prompt": SettingModel.get('system_prompt', 'You are a helpful assistant.'),
+        "temperature": float(SettingModel.get('temperature', '0.7')),
         "mongo_status": db.ping()
     })
 
@@ -82,102 +78,60 @@ def get_available_models():
 # Conversations Endpoints
 @api_bp.route('/conversations', methods=['GET', 'POST'])
 def handle_conversations():
-    if db.conversations_col is None:
-        return jsonify([])
     if request.method == 'POST':
         data = request.json or {}
-        conv_id = str(uuid.uuid4())
         title = data.get('title', 'New Chat').strip()
-        
-        db.conversations_col.insert_one({
-            "_id": conv_id,
-            "title": title,
-            "created_at": datetime.datetime.now(datetime.timezone.utc)
-        })
-        return jsonify({"id": conv_id, "title": title})
+        new_conv = ConversationModel.create(title)
+        if new_conv is None:
+            return jsonify({"status": "error", "message": "Database not connected"}), 500
+        return jsonify(new_conv)
     
-    # GET method
-    rows = db.conversations_col.find().sort("created_at", pymongo.DESCENDING)
-    conversations = []
-    for r in rows:
-        conversations.append({
-            "id": r["_id"],
-            "title": r["title"],
-            "created_at": r["created_at"].isoformat() if isinstance(r["created_at"], datetime.datetime) else str(r["created_at"])
-        })
-    return jsonify(conversations)
+    return jsonify(ConversationModel.list_all())
 
 @api_bp.route('/conversations/<conv_id>', methods=['DELETE', 'PUT'])
 def modify_conversation(conv_id):
-    if db.conversations_col is None or db.messages_col is None:
-        return jsonify({"status": "error", "message": "Database not connected"}), 500
     if request.method == 'DELETE':
-        db.conversations_col.delete_one({"_id": conv_id})
-        db.messages_col.delete_many({"conversation_id": conv_id})
+        success = ConversationModel.delete(conv_id)
+        if not success:
+            return jsonify({"status": "error", "message": "Failed to delete conversation"}), 500
         return jsonify({"status": "success"})
     
     elif request.method == 'PUT':
-        data = request.json or {}
-        title = data.get('title', '').strip()
-        if not title:
-            return jsonify({"status": "error", "message": "Title cannot be empty"}), 400
+        form = RenameForm(request.json)
+        if not form.validate():
+            return jsonify({"status": "error", "errors": form.errors}), 400
         
-        db.conversations_col.update_one({"_id": conv_id}, {"$set": {"title": title}})
-        return jsonify({"status": "success", "title": title})
+        success = ConversationModel.rename(conv_id, form.title)
+        if not success:
+            return jsonify({"status": "error", "message": "Failed to rename conversation"}), 500
+        return jsonify({"status": "success", "title": form.title})
 
 @api_bp.route('/conversations/<conv_id>/messages', methods=['GET'])
 def get_messages(conv_id):
-    if db.messages_col is None:
-        return jsonify([])
-    rows = db.messages_col.find({"conversation_id": conv_id}).sort("created_at", pymongo.ASCENDING)
-    messages = []
-    for r in rows:
-        messages.append({
-            "role": r["role"],
-            "content": r["content"]
-        })
-    return jsonify(messages)
+    return jsonify(MessageModel.get_history(conv_id))
 
 @api_bp.route('/chat', methods=['POST'])
 def chat():
-    data = request.json
-    conv_id = data.get('conversation_id')
-    user_message = data.get('message', '').strip()
-    think_mode = data.get('think_mode', False)
-    
-    if not conv_id or not user_message:
-        return jsonify({"status": "error", "message": "Missing conversation_id or message"}), 400
+    form = ChatForm(request.json)
+    if not form.validate():
+        return jsonify({"status": "error", "errors": form.errors}), 400
         
-    if db.messages_col is None or db.conversations_col is None:
-        return jsonify({"status": "error", "message": "Database not connected"}), 500
+    conv_id = form.conversation_id
+    user_message = form.message
+    think_mode = form.think_mode
 
     # Check if conversation exists, if not create it
-    conv = db.conversations_col.find_one({"_id": conv_id})
-    if not conv:
-        db.conversations_col.insert_one({
-            "_id": conv_id,
-            "title": user_message[:30] + ('...' if len(user_message) > 30 else ''),
-            "created_at": datetime.datetime.now(datetime.timezone.utc)
-        })
+    if not ConversationModel.exists(conv_id):
+        ConversationModel.create(user_message[:30] + ('...' if len(user_message) > 30 else ''))
 
     # Save user message
-    user_msg_id = str(uuid.uuid4())
-    db.messages_col.insert_one({
-        "_id": user_msg_id,
-        "conversation_id": conv_id,
-        "role": "user",
-        "content": user_message,
-        "created_at": datetime.datetime.now(datetime.timezone.utc)
-    })
+    MessageModel.save(conv_id, "user", user_message)
     
     # Retrieve chat history for context
-    rows = db.messages_col.find({"conversation_id": conv_id}).sort("created_at", pymongo.ASCENDING)
-    history = []
-    for r in rows:
-        history.append({"role": r['role'], "content": r['content']})
+    history = MessageModel.get_history(conv_id)
     
     # Setup system prompt from settings
-    system_prompt = db.get_setting('system_prompt', 'You are a helpful assistant.')
+    system_prompt = SettingModel.get('system_prompt', 'You are a helpful assistant.')
     
     # Modify for Think Mode if active
     if think_mode:
@@ -190,7 +144,7 @@ def chat():
     
     api_url = get_api_url()
     model_name = get_model_name()
-    temperature = float(db.get_setting('temperature', '0.7'))
+    temperature = float(SettingModel.get('temperature', '0.7'))
     
     headers = {
         "Content-Type": "application/json"
@@ -232,15 +186,8 @@ def chat():
                             
             # Stream completed, save to database
             full_response = "".join(assistant_content)
-            if full_response and db.messages_col is not None:
-                assist_msg_id = str(uuid.uuid4())
-                db.messages_col.insert_one({
-                    "_id": assist_msg_id,
-                    "conversation_id": conv_id,
-                    "role": "assistant",
-                    "content": full_response,
-                    "created_at": datetime.datetime.now(datetime.timezone.utc)
-                })
+            if full_response:
+                MessageModel.save(conv_id, "assistant", full_response)
                 
         except requests.exceptions.RequestException as e:
             error_msg = f"Error connecting to LM Studio API: {str(e)}. Please check if your LM Studio server is running and the API endpoint is correct."
