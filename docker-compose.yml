@@ -1,0 +1,36 @@
+version: '3.8'
+
+services:
+  mongodb:
+    image: mongo:latest
+    container_name: hope_chat_db
+    ports:
+      - "27017:27017"
+    volumes:
+      - mongo_data:/data/db
+    restart: unless-stopped
+    networks:
+      - hope_chat_net
+
+  web:
+    build: .
+    container_name: hope_chat_web
+    ports:
+      - "5001:5001"
+    environment:
+      - MONGO_URI=mongodb://mongodb:27017/
+      - MONGO_DB=hope_chat
+      - FLASK_PORT=5001
+      - FLASK_DEBUG=True
+    depends_on:
+      - mongodb
+    restart: unless-stopped
+    networks:
+      - hope_chat_net
+
+volumes:
+  mongo_data:
+
+networks:
+  hope_chat_net:
+    driver: bridge

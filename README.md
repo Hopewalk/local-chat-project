@@ -24,6 +24,9 @@ The project is structured according to the **Flask Application Factory Pattern**
 /Users/hope/Desktop/chat/lm/
 ├── config.py             # Config class loading variables from .env
 ├── run.py                # Server entrypoint launcher
+├── Dockerfile            # Container build configurations
+├── docker-compose.yml    # Docker Compose settings for Flask + MongoDB
+├── .dockerignore         # Docker build exclude rules
 ├── app/                  # Main application package
 │   ├── __init__.py       # Application Factory (registers blueprints & initialises database)
 │   ├── db.py             # MongoDB connection client setup

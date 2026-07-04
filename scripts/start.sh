@@ -1,8 +1,14 @@
 #!/bin/bash
-# Find project root relative to script location
-SCRIPT_DIR="$( cd "$( dirname "${BASH_SOURCE[0]}" )" && pwd )"
-PROJECT_ROOT="$( dirname "$SCRIPT_DIR" )"
-cd "$PROJECT_ROOT"
-
-echo "Starting Hope Chat Server..."
-.venv/bin/python run.py
+if [ -f ".venv/bin/python" ]; then
+    # Running from project root
+    echo "Starting Hope Chat Server..."
+    .venv/bin/python run.py
+elif [ -f "../.venv/bin/python" ]; then
+    # Running from inside scripts/ folder
+    cd ..
+    echo "Starting Hope Chat Server..."
+    .venv/bin/python run.py
+else
+    echo "Error: .venv virtual environment not found."
+    exit 1
+fi
