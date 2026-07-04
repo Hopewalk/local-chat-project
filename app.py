@@ -22,7 +22,6 @@ try:
     
     # Collections
     settings_col = db['settings']
-    conversations_col = db['conversations']
     messages_col = db['messages']
     
     # Test connection
@@ -118,51 +117,10 @@ def get_available_models():
     except Exception as e:
         return jsonify({"status": "error", "message": f"Could not connect to API: {str(e)}", "models": []})
 
-# Conversations Endpoints
-@app.route('/api/conversations', methods=['GET', 'POST'])
-def handle_conversations():
-    if request.method == 'POST':
-        data = request.json or {}
-        conv_id = str(uuid.uuid4())
-        title = data.get('title', 'New Chat').strip()
-        
-        conversations_col.insert_one({
-            "_id": conv_id,
-            "title": title,
-            "created_at": datetime.datetime.now(datetime.timezone.utc)
-        })
-        return jsonify({"id": conv_id, "title": title})
-    
-    # GET method
-    rows = conversations_col.find().sort("created_at", pymongo.DESCENDING)
-    conversations = []
-    for r in rows:
-        conversations.append({
-            "id": r["_id"],
-            "title": r["title"],
-            "created_at": r["created_at"].isoformat() if isinstance(r["created_at"], datetime.datetime) else str(r["created_at"])
-        })
-    return jsonify(conversations)
-
-@app.route('/api/conversations/<conv_id>', methods=['DELETE', 'PUT'])
-def modify_conversation(conv_id):
-    if request.method == 'DELETE':
-        conversations_col.delete_one({"_id": conv_id})
-        messages_col.delete_many({"conversation_id": conv_id})
-        return jsonify({"status": "success"})
-    
-    elif request.method == 'PUT':
-        data = request.json or {}
-        title = data.get('title', '').strip()
-        if not title:
-            return jsonify({"status": "error", "message": "Title cannot be empty"}), 400
-        
-        conversations_col.update_one({"_id": conv_id}, {"$set": {"title": title}})
-        return jsonify({"status": "success", "title": title})
-
-@app.route('/api/conversations/<conv_id>/messages', methods=['GET'])
-def get_messages(conv_id):
-    rows = messages_col.find({"conversation_id": conv_id}).sort("created_at", pymongo.ASCENDING)
+# Chat History Endpoints
+@app.route('/api/chat/history', methods=['GET'])
+def get_chat_history():
+    rows = messages_col.find().sort("created_at", pymongo.ASCENDING)
     messages = []
     for r in rows:
         messages.append({
@@ -171,38 +129,32 @@ def get_messages(conv_id):
         })
     return jsonify(messages)
 
+@app.route('/api/chat/clear', methods=['POST'])
+def clear_chat_history():
+    messages_col.delete_many({})
+    return jsonify({"status": "success"})
+
 # Chat stream
 @app.route('/api/chat', methods=['POST'])
 def chat():
     data = request.json
-    conv_id = data.get('conversation_id')
     user_message = data.get('message', '').strip()
     think_mode = data.get('think_mode', False)
     
-    if not conv_id or not user_message:
-        return jsonify({"status": "error", "message": "Missing conversation_id or message"}), 400
-    
-    # Check if conversation exists, if not create it
-    conv = conversations_col.find_one({"_id": conv_id})
-    if not conv:
-        conversations_col.insert_one({
-            "_id": conv_id,
-            "title": user_message[:30] + ('...' if len(user_message) > 30 else ''),
-            "created_at": datetime.datetime.now(datetime.timezone.utc)
-        })
+    if not user_message:
+        return jsonify({"status": "error", "message": "Missing message"}), 400
         
     # Save user message
     user_msg_id = str(uuid.uuid4())
     messages_col.insert_one({
         "_id": user_msg_id,
-        "conversation_id": conv_id,
         "role": "user",
         "content": user_message,
         "created_at": datetime.datetime.now(datetime.timezone.utc)
     })
     
     # Retrieve chat history for context
-    rows = messages_col.find({"conversation_id": conv_id}).sort("created_at", pymongo.ASCENDING)
+    rows = messages_col.find().sort("created_at", pymongo.ASCENDING)
     history = []
     for r in rows:
         history.append({"role": r['role'], "content": r['content']})
@@ -264,7 +216,6 @@ def chat():
                 assist_msg_id = str(uuid.uuid4())
                 messages_col.insert_one({
                     "_id": assist_msg_id,
-                    "conversation_id": conv_id,
                     "role": "assistant",
                     "content": full_response,
                     "created_at": datetime.datetime.now(datetime.timezone.utc)

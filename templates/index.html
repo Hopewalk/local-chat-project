@@ -21,48 +21,35 @@
 </head>
 <body>
     <div class="app-container">
-        <!-- Sidebar -->
-        <aside class="sidebar" id="sidebar">
-            <div class="sidebar-header">
-                <div class="brand">
-                    <div class="brand-logo">
-                        <i class="fa-solid fa-brain-circuit logo-icon"></i>
-                    </div>
-                    <span class="brand-name">Hope</span>
-                </div>
-                <button class="btn-new-chat" id="new-chat-btn">
-                    <i class="fa-solid fa-plus"></i> New Chat
-                </button>
-            </div>
-            
-            <div class="conversation-list-container">
-                <div class="section-label">Conversations</div>
-                <div class="conversation-list" id="conversation-list">
-                    <!-- Conversations loaded dynamically -->
-                </div>
-            </div>
-            
-            <div class="sidebar-footer">
-                <div class="connection-status" id="api-status-badge">
-                    <span class="status-dot red"></span>
-                    <span class="status-text" id="status-text">LM Studio Offline</span>
-                </div>
-                <button class="btn-settings" id="settings-btn">
-                    <i class="fa-solid fa-sliders"></i> Connection Settings
-                </button>
-            </div>
-        </aside>
-
         <!-- Main Chat Area -->
         <main class="chat-area">
             <!-- Top bar -->
             <header class="top-bar">
                 <div class="chat-header-info">
-                    <button class="sidebar-toggle" id="sidebar-toggle">
-                        <i class="fa-solid fa-bars"></i>
-                    </button>
-                    <h2 class="active-chat-title" id="chat-title">New Conversation</h2>
+                    <div class="brand">
+                        <div class="brand-logo">
+                            <i class="fa-solid fa-brain-circuit logo-icon"></i>
+                        </div>
+                        <span class="brand-name">Hope Chat</span>
+                    </div>
                     <span class="model-badge" id="current-model-badge">No model loaded</span>
+                </div>
+                
+                <div class="header-controls">
+                    <!-- API Connection status -->
+                    <div class="connection-status" id="api-status-badge">
+                        <span class="status-dot red"></span>
+                        <span class="status-text" id="status-text">LM Studio Offline</span>
+                    </div>
+                    
+                    <!-- Settings & Action Buttons -->
+                    <button class="btn-action" id="settings-btn" title="Connection Settings">
+                        <i class="fa-solid fa-sliders"></i> Settings
+                    </button>
+                    
+                    <button class="btn-action danger" id="clear-chat-btn" title="Clear Chat History">
+                        <i class="fa-solid fa-trash-can"></i> Clear Chat
+                    </button>
                 </div>
             </header>
 
@@ -75,7 +62,7 @@
                             <i class="fa-solid fa-sparkles"></i>
                         </div>
                         <h1>What shall we create today?</h1>
-                        <p class="welcome-subtitle">Connected to Qwen 3.5 & local LM Studio. Powered by your local setup.</p>
+                        <p class="welcome-subtitle">Connected to Qwen 3.5 & local LM Studio. Powered by MongoDB.</p>
                     </div>
                     
                     <div class="starters-grid">
@@ -123,7 +110,7 @@
                     </div>
                 </div>
                 <div class="input-footer">
-                    <span>LM Studio API Client • Local Network Share</span>
+                    <span>Hope Chat Client • Local Network Share</span>
                 </div>
             </footer>
         </main>

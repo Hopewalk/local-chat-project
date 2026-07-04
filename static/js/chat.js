@@ -1,22 +1,17 @@
 // Global state
-let currentConversationId = null;
 let isStreaming = false;
 let thinkMode = localStorage.getItem('thinkMode') === 'true';
 let abortController = null;
 let appSettings = {
     api_url: 'http://localhost:1234/v1',
-    model_name: 'qwen2.5-7b-instruct'
+    model_name: 'qwen/qwen3.5-9b'
 };
 
 // DOM Elements
-const sidebar = document.getElementById('sidebar');
-const sidebarToggle = document.getElementById('sidebar-toggle');
-const conversationList = document.getElementById('conversation-list');
-const newChatBtn = document.getElementById('new-chat-btn');
 const apiStatusBadge = document.getElementById('api-status-badge');
 const statusText = document.getElementById('status-text');
 const settingsBtn = document.getElementById('settings-btn');
-const chatTitle = document.getElementById('chat-title');
+const clearChatBtn = document.getElementById('clear-chat-btn');
 const currentModelBadge = document.getElementById('current-model-badge');
 const messagesContainer = document.getElementById('messages-container');
 const welcomeScreen = document.getElementById('welcome-screen');
@@ -45,7 +40,7 @@ marked.setOptions({
    ========================================================================== */
 document.addEventListener('DOMContentLoaded', () => {
     loadSettings();
-    loadConversations();
+    loadChatHistory();
     checkConnectionStatus();
     
     // Set Think Mode initial state
@@ -56,23 +51,6 @@ document.addEventListener('DOMContentLoaded', () => {
 });
 
 function setupEventListeners() {
-    // Sidebar toggle (mobile)
-    sidebarToggle.addEventListener('click', () => {
-        sidebar.classList.toggle('open');
-    });
-
-    // Close sidebar when clicking main content on mobile
-    document.querySelector('.chat-area').addEventListener('click', (e) => {
-        if (window.innerWidth <= 768 && sidebar.classList.contains('open') && !sidebar.contains(e.target) && !sidebarToggle.contains(e.target)) {
-            sidebar.classList.remove('open');
-        }
-    });
-
-    // New chat button
-    newChatBtn.addEventListener('click', () => {
-        createNewConversation();
-    });
-
     // Send button & input keypresses
     sendBtn.addEventListener('click', handleSendMessage);
     chatInput.addEventListener('keydown', (e) => {
@@ -89,6 +67,9 @@ function setupEventListeners() {
         localStorage.setItem('thinkMode', thinkMode);
         setThinkModeState(thinkMode);
     });
+
+    // Clear Chat Button
+    clearChatBtn.addEventListener('click', handleClearChat);
 
     // Settings modal interactions
     settingsBtn.addEventListener('click', openSettingsModal);
@@ -169,7 +150,6 @@ function setConnectionBadge(online) {
 
 function updateModelBadge(modelName) {
     if (modelName) {
-        // Truncate or simplify model name if it's too long
         let displayName = modelName;
         if (modelName.includes('/')) {
             displayName = modelName.split('/').pop();
@@ -321,125 +301,19 @@ async function saveSettings() {
 }
 
 /* ==========================================================================
-   CONVERSATION HISTORY LOGIC
+   CHAT HISTORY LOGIC
    ========================================================================== */
-async function loadConversations() {
-    try {
-        const response = await fetch('/api/conversations');
-        if (response.ok) {
-            const conversations = await response.json();
-            renderConversationList(conversations);
-            
-            // Auto-select first conversation if available, otherwise stay on empty screen
-            if (conversations.length > 0 && !currentConversationId) {
-                selectConversation(conversations[0].id);
-            }
-        }
-    } catch (e) {
-        console.error('Failed to load conversations:', e);
-    }
-}
-
-function renderConversationList(conversations) {
-    conversationList.innerHTML = '';
-    
-    if (conversations.length === 0) {
-        conversationList.innerHTML = '<div style="font-size:12px; color:var(--text-muted); text-align:center; padding:15px 0;">No active chats</div>';
-        return;
-    }
-    
-    conversations.forEach(conv => {
-        const item = document.createElement('div');
-        item.className = `conversation-item ${conv.id === currentConversationId ? 'active' : ''}`;
-        item.setAttribute('data-id', conv.id);
-        
-        item.innerHTML = `
-            <div class="conv-title-wrapper">
-                <i class="fa-solid fa-message conv-icon"></i>
-                <span class="conv-title" title="Double click to rename">${escapeHtml(conv.title)}</span>
-            </div>
-            <div class="conv-actions">
-                <button class="conv-action-btn edit-btn" title="Rename"><i class="fa-solid fa-pencil"></i></button>
-                <button class="conv-action-btn delete-btn" title="Delete"><i class="fa-solid fa-trash"></i></button>
-            </div>
-        `;
-        
-        // Select chat
-        item.addEventListener('click', (e) => {
-            if (e.target.closest('.conv-actions') || e.target.closest('.conv-edit-input')) return;
-            selectConversation(conv.id);
-            if (window.innerWidth <= 768) {
-                sidebar.classList.remove('open');
-            }
-        });
-        
-        // Double click rename
-        const titleSpan = item.querySelector('.conv-title');
-        titleSpan.addEventListener('dblclick', () => {
-            startRenameConversation(conv.id, item, titleSpan);
-        });
-
-        // Pencil icon rename
-        const editBtn = item.querySelector('.edit-btn');
-        editBtn.addEventListener('click', () => {
-            startRenameConversation(conv.id, item, titleSpan);
-        });
-        
-        // Delete chat
-        const deleteBtn = item.querySelector('.delete-btn');
-        deleteBtn.addEventListener('click', (e) => {
-            e.stopPropagation();
-            deleteConversation(conv.id);
-        });
-        
-        conversationList.appendChild(item);
-    });
-}
-
-async function createNewConversation() {
-    try {
-        const response = await fetch('/api/conversations', {
-            method: 'POST',
-            headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({ title: 'New Conversation' })
-        });
-        
-        if (response.ok) {
-            const newConv = await response.json();
-            currentConversationId = newConv.id;
-            await loadConversations();
-            selectConversation(newConv.id);
-        }
-    } catch (e) {
-        console.error(e);
-    }
-}
-
-async function selectConversation(id) {
-    currentConversationId = id;
-    
-    // Update active class in sidebar list
-    document.querySelectorAll('.conversation-item').forEach(item => {
-        if (item.getAttribute('data-id') === id) {
-            item.classList.add('active');
-            chatTitle.textContent = item.querySelector('.conv-title').textContent;
-        } else {
-            item.classList.remove('active');
-        }
-    });
-    
-    // Clear chat area
+async function loadChatHistory() {
     messagesContainer.innerHTML = '';
-    welcomeScreen.style.display = 'none';
+    welcomeScreen.style.display = 'flex';
     
     try {
-        const response = await fetch(`/api/conversations/${id}/messages`);
+        const response = await fetch('/api/chat/history');
         if (response.ok) {
             const messages = await response.json();
             
-            if (messages.length === 0) {
-                welcomeScreen.style.display = 'flex';
-            } else {
+            if (messages.length > 0) {
+                welcomeScreen.style.display = 'none';
                 messages.forEach(msg => {
                     appendMessageBubble(msg.role, msg.content);
                 });
@@ -447,88 +321,26 @@ async function selectConversation(id) {
             }
         }
     } catch (e) {
-        console.error('Error fetching messages:', e);
+        console.error('Error fetching chat history:', e);
     }
 }
 
-function startRenameConversation(id, itemElement, titleSpan) {
-    const oldTitle = titleSpan.textContent;
-    const input = document.createElement('input');
-    input.type = 'text';
-    input.className = 'conv-edit-input';
-    input.value = oldTitle;
-    
-    const wrapper = itemElement.querySelector('.conv-title-wrapper');
-    const oldIcon = wrapper.querySelector('.conv-icon');
-    
-    wrapper.innerHTML = '';
-    wrapper.appendChild(oldIcon);
-    wrapper.appendChild(input);
-    input.focus();
-    input.select();
-    
-    const finishRename = async () => {
-        const newTitle = input.value.trim();
-        if (newTitle && newTitle !== oldTitle) {
-            try {
-                const response = await fetch(`/api/conversations/${id}`, {
-                    method: 'PUT',
-                    headers: { 'Content-Type': 'application/json' },
-                    body: JSON.stringify({ title: newTitle })
-                });
-                if (response.ok) {
-                    titleSpan.textContent = newTitle;
-                    if (currentConversationId === id) {
-                        chatTitle.textContent = newTitle;
-                    }
-                }
-            } catch (e) {
-                console.error(e);
-            }
-        }
-        
-        // Restore elements
-        wrapper.innerHTML = '';
-        wrapper.appendChild(oldIcon);
-        wrapper.appendChild(titleSpan);
-        // Refresh conversations in case UI needs syncing
-        loadConversations();
-    };
-    
-    input.addEventListener('keydown', (e) => {
-        if (e.key === 'Enter') {
-            finishRename();
-        } else if (e.key === 'Escape') {
-            // Restore without saving
-            wrapper.innerHTML = '';
-            wrapper.appendChild(oldIcon);
-            wrapper.appendChild(titleSpan);
-            loadConversations();
-        }
-    });
-    
-    input.addEventListener('blur', finishRename);
-}
-
-async function deleteConversation(id) {
-    if (!confirm('Are you sure you want to delete this chat history?')) return;
+async function handleClearChat() {
+    if (!confirm('Are you sure you want to clear your chat history? This cannot be undone.')) return;
     
     try {
-        const response = await fetch(`/api/conversations/${id}`, {
-            method: 'DELETE'
+        const response = await fetch('/api/chat/clear', {
+            method: 'POST'
         });
         
         if (response.ok) {
-            if (currentConversationId === id) {
-                currentConversationId = null;
-                chatTitle.textContent = 'New Conversation';
-                messagesContainer.innerHTML = '';
-                welcomeScreen.style.display = 'flex';
-            }
-            loadConversations();
+            messagesContainer.innerHTML = '';
+            welcomeScreen.style.display = 'flex';
+        } else {
+            alert('Failed to clear chat history.');
         }
     } catch (e) {
-        console.error(e);
+        console.error('Error clearing chat:', e);
     }
 }
 
@@ -550,18 +362,15 @@ function appendMessageBubble(role, content, messageId = null) {
     if (role === 'user') {
         bubble.textContent = content;
     } else {
-        // Assistant responses - render thinking and markdown
         renderAssistantResponse(bubble, content);
     }
     
     row.appendChild(bubble);
     messagesContainer.appendChild(row);
     
-    // Handle Prism syntax highlighting
     if (role === 'assistant') {
         try {
             Prism.highlightAllUnder(bubble);
-            addCopyButtonsToCodeBlocks(bubble);
         } catch (e) {
             console.error('Prism highlighting error:', e);
         }
@@ -570,16 +379,13 @@ function appendMessageBubble(role, content, messageId = null) {
     return row;
 }
 
-// Extract `<think>` tags and render them properly
 function renderAssistantResponse(bubbleElement, rawContent) {
     bubbleElement.innerHTML = '';
-    
     const parsed = parseThinkingAndContent(rawContent);
     
-    // 1. Render thinking process if present
+    // Render thinking process if present
     if (parsed.thinking !== null) {
         const thinkBlock = document.createElement('div');
-        // Retrieve collapsed status from local storage or default to open
         thinkBlock.className = 'thinking-block';
         
         const header = document.createElement('div');
@@ -605,12 +411,11 @@ function renderAssistantResponse(bubbleElement, rawContent) {
         bubbleElement.appendChild(thinkBlock);
     }
     
-    // 2. Render response text
+    // Render response text
     if (parsed.content) {
         const contentContainer = document.createElement('div');
         contentContainer.className = 'markdown-body';
         
-        // Custom rendering for Marked to wrap pre/code in gorgeous structures
         const renderer = new marked.Renderer();
         renderer.code = function(code, language) {
             const validLanguage = language || 'text';
@@ -632,7 +437,6 @@ function renderAssistantResponse(bubbleElement, rawContent) {
     }
 }
 
-// Parses accumulated stream text to separate <think> content from normal text
 function parseThinkingAndContent(text) {
     const thinkStart = text.indexOf('<think>');
     const thinkEnd = text.indexOf('</think>');
@@ -642,11 +446,9 @@ function parseThinkingAndContent(text) {
     
     if (thinkStart !== -1) {
         if (thinkEnd !== -1) {
-            // Both start and end tags exist
             thinking = text.substring(thinkStart + 7, thinkEnd).trim();
             content = text.substring(0, thinkStart) + text.substring(thinkEnd + 8);
         } else {
-            // Start tag exists but end tag does not (still typing thought)
             thinking = text.substring(thinkStart + 7);
             content = text.substring(0, thinkStart);
         }
@@ -663,7 +465,6 @@ function parseThinkingAndContent(text) {
    ========================================================================== */
 async function handleSendMessage() {
     if (isStreaming) {
-        // Cancel stream
         if (abortController) {
             abortController.abort();
         }
@@ -678,11 +479,6 @@ async function handleSendMessage() {
     autoResizeTextarea();
     sendBtn.disabled = true;
     
-    // Ensure we have a conversation ID
-    if (!currentConversationId) {
-        await createNewConversation();
-    }
-    
     // Render user message bubble
     appendMessageBubble('user', messageText);
     scrollToBottom();
@@ -692,7 +488,6 @@ async function handleSendMessage() {
     const assistantRow = appendMessageBubble('assistant', '', assistantMsgId);
     const bubbleElement = assistantRow.querySelector('.message-bubble');
     
-    // Show dynamic streaming indicator in assistant bubble initially
     bubbleElement.innerHTML = '<span class="status-text"><i class="fa-solid fa-spinner fa-spin"></i> Hope is thinking...</span>';
     scrollToBottom();
     
@@ -709,7 +504,6 @@ async function handleSendMessage() {
                 'Content-Type': 'application/json'
             },
             body: JSON.stringify({
-                conversation_id: currentConversationId,
                 message: messageText,
                 think_mode: thinkMode
             }),
@@ -742,26 +536,19 @@ async function handleSendMessage() {
                         }
                         if (dataObj.content) {
                             accumulatedContent += dataObj.content;
-                            // Re-render assistant response with markdown and think tags
                             renderAssistantResponse(bubbleElement, accumulatedContent);
                             Prism.highlightAllUnder(bubbleElement);
-                            addCopyButtonsToCodeBlocks(bubbleElement);
                             scrollToBottom();
                         }
                     } catch (e) {
-                        // Handle JSON parsing error if chunks are incomplete or corrupted
-                        console.warn('Failed to parse SSE data:', e, 'Data string:', dataStr);
+                        console.warn('Failed to parse SSE data:', e);
                     }
                 }
             }
         }
         
-        // Final status updates
         isStreaming = false;
         updateSendBtnState();
-        
-        // Update conversation list layout to fetch updated titles (first message updates title)
-        loadConversations();
         
     } catch (error) {
         if (error.name === 'AbortError') {
@@ -790,7 +577,6 @@ function updateSendBtnState() {
         sendBtn.innerHTML = '<i class="fa-solid fa-arrow-up"></i>';
         sendBtn.className = 'send-btn';
         sendBtn.title = 'Send message';
-        // Adjust disable state based on input text
         sendBtn.disabled = chatInput.value.trim().length === 0;
     }
 }
@@ -802,7 +588,6 @@ function autoResizeTextarea() {
     chatInput.style.height = 'auto';
     chatInput.style.height = chatInput.scrollHeight + 'px';
     
-    // Adjust send button state based on text presence
     if (!isStreaming) {
         sendBtn.disabled = chatInput.value.trim().length === 0;
     }
@@ -820,11 +605,6 @@ function escapeHtml(text) {
         .replace(/>/g, "&gt;")
         .replace(/"/g, "&quot;")
         .replace(/'/g, "&#039;");
-}
-
-function addCopyButtonsToCodeBlocks(container) {
-    // Add event handlers directly to pre container copy buttons
-    // The inline code uses static HTML but just in case, we map copy buttons here.
 }
 
 window.copyCode = function(button) {
